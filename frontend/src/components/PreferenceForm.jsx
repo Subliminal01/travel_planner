@@ -2,10 +2,44 @@ import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { Compass, Calendar, DollarSign, Clock, Heart, Loader2 } from 'lucide-react'
 
+const COMMON_LOCATIONS = [
+  'Delhi, India',
+  'New Delhi, India',
+  'Delray Beach, USA',
+  'Delft, Netherlands',
+  'Mumbai, India',
+  'Bengaluru, India',
+  'Hyderabad, India',
+  'Chennai, India',
+  'Kolkata, India',
+  'Pune, India',
+  'Jaipur, India',
+  'Goa, India',
+  'Ahmedabad, India',
+  'London, United Kingdom',
+  'Paris, France',
+  'Tokyo, Japan',
+  'New York City, USA',
+  'San Francisco, USA',
+  'Dubai, United Arab Emirates',
+  'Singapore',
+  'Bangkok, Thailand',
+  'Bali, Indonesia',
+  'Sydney, Australia',
+  'Rome, Italy',
+  'Barcelona, Spain',
+  'Amsterdam, Netherlands',
+  'Cape Town, South Africa',
+  'Reykjavik, Iceland',
+  'Lisbon, Portugal',
+  'Kyoto, Japan',
+  'Seoul, South Korea'
+]
+
 export default function PreferenceForm({ onSubmit, loading }) {
   const [destinations, setDestinations] = useState([])
   const [destLoading, setDestLoading] = useState(true)
-  const [customDestination, setCustomDestination] = useState('')
+  const [destinationQuery, setDestinationQuery] = useState('')
 
   const [formData, setFormData] = useState({
     origin: 'New York',
@@ -17,9 +51,27 @@ export default function PreferenceForm({ onSubmit, loading }) {
   })
 
   const normalizeDestinationId = (value) => {
-    const normalized = value.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+    const cityName = value.split(',')[0]
+    const normalized = cityName.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
     return normalized.slice(0, 60)
   }
+
+  const suggestionOptions = [
+    ...destinations.map(dest => ({
+      value: `${dest.name}, ${dest.country}`,
+      label: 'Curated destination',
+      destinationId: dest.id,
+      destinationName: dest.name
+    })),
+    ...COMMON_LOCATIONS.map(location => ({
+      value: location,
+      label: 'Suggested location',
+      destinationId: normalizeDestinationId(location),
+      destinationName: location.split(',')[0].trim()
+    }))
+  ].filter((option, index, options) => (
+    index === options.findIndex(item => item.value.toLowerCase() === option.value.toLowerCase())
+  ))
 
   useEffect(() => {
     // Fetch available destinations from FastAPI
@@ -28,6 +80,7 @@ export default function PreferenceForm({ onSubmit, loading }) {
         setDestinations(res.data)
         if (res.data.length > 0) {
           setFormData(prev => ({ ...prev, destination_id: res.data[0].id }))
+          setDestinationQuery(`${res.data[0].name}, ${res.data[0].country}`)
         }
         setDestLoading(false)
       })
@@ -39,10 +92,12 @@ export default function PreferenceForm({ onSubmit, loading }) {
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    const isCustomDestination = formData.destination_id === '__custom'
-    const selectedDestination = destinations.find(dest => dest.id === formData.destination_id)
-    const destinationName = isCustomDestination ? customDestination.trim() : selectedDestination?.name
-    const destinationId = isCustomDestination ? normalizeDestinationId(destinationName) : formData.destination_id
+    const typedDestination = destinationQuery.trim()
+    const matchedSuggestion = suggestionOptions.find(
+      option => option.value.toLowerCase() === typedDestination.toLowerCase()
+    )
+    const destinationName = matchedSuggestion?.destinationName ?? typedDestination.split(',')[0].trim()
+    const destinationId = matchedSuggestion?.destinationId ?? normalizeDestinationId(typedDestination)
 
     if (!destinationId || !destinationName) return
 
@@ -79,56 +134,37 @@ export default function PreferenceForm({ onSubmit, loading }) {
       </h2>
 
       <form onSubmit={handleSubmit} className="space-y-5">
-        {/* Destination Select */}
+        {/* Destination Autocomplete */}
         <div>
           <label htmlFor="destination-id" className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
             Select Destination
           </label>
-          <div className="relative">
-            <select
-              id="destination-id"
-              name="destination_id"
-              value={formData.destination_id}
-              onChange={(e) => setFormData({ ...formData, destination_id: e.target.value })}
-              className="w-full glass-input rounded-xl px-4 py-3 text-sm appearance-none cursor-pointer"
-            >
-              {destinations.map(dest => (
-                <option key={dest.id} value={dest.id} className="bg-brand-darkCard text-white">
-                  {dest.name} ({dest.country})
-                </option>
-              ))}
-              <option value="__custom" className="bg-brand-darkCard text-white">
-                Anywhere else...
+          <input
+            id="destination-id"
+            name="destination"
+            type="text"
+            list="destination-suggestions"
+            value={destinationQuery}
+            onChange={(e) => setDestinationQuery(e.target.value)}
+            className="w-full glass-input rounded-xl px-4 py-3 text-sm"
+            placeholder="Type any city or place, e.g. Delhi, Lisbon, Cape Town"
+            maxLength={80}
+            autoComplete="off"
+            required
+          />
+          <datalist id="destination-suggestions">
+            {suggestionOptions.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.label}
               </option>
-            </select>
-            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-300 text-xs" aria-hidden="true">
-              ▼
-            </div>
-          </div>
-          {formData.destination_id === '__custom' && (
-            <div className="mt-3">
-              <label htmlFor="custom-destination" className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-                Custom Destination
-              </label>
-              <input
-                id="custom-destination"
-                name="custom_destination"
-                type="text"
-                value={customDestination}
-                onChange={(e) => setCustomDestination(e.target.value)}
-                className="w-full glass-input rounded-xl px-4 py-3 text-sm"
-                placeholder="Type any city or place, e.g. Lisbon, Cape Town, Kyoto"
-                maxLength={80}
-                required
-              />
-              <p className="text-[10px] text-slate-300 mt-2 italic leading-relaxed">
-                For custom places, Aether creates a flexible starter itinerary with generic local culture, food, outdoor, and wellness options.
-              </p>
-            </div>
-          )}
+            ))}
+          </datalist>
+          <p className="text-[10px] text-slate-300 mt-2 italic leading-relaxed">
+            Start typing a place name to see recommendations, or enter any destination worldwide.
+          </p>
         </div>
 
-        {/* Origin */}
+        {/* Origin Autocomplete */}
         <div>
           <label htmlFor="origin" className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
             Departure Airport (Origin)
@@ -137,12 +173,22 @@ export default function PreferenceForm({ onSubmit, loading }) {
             id="origin"
             name="origin"
             type="text"
+            list="origin-suggestions"
             value={formData.origin}
             onChange={(e) => setFormData({ ...formData, origin: e.target.value })}
             className="w-full glass-input rounded-xl px-4 py-3 text-sm"
-            placeholder="City or Airport (e.g. New York)"
+            placeholder="Type a city or airport, e.g. Delhi, Mumbai, New York"
+            maxLength={80}
+            autoComplete="off"
             required
           />
+          <datalist id="origin-suggestions">
+            {suggestionOptions.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </datalist>
         </div>
 
         {/* Start Date & Days */}
