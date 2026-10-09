@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { AlertTriangle, CloudLightning, ShieldAlert, Sparkles, Percent } from 'lucide-react'
+import { AlertTriangle, CloudLightning, Percent } from 'lucide-react'
 
 export default function ConstraintSimulator({ itinerary, onRecalculate, loading }) {
   const [weatherDisruption, setWeatherDisruption] = useState({
@@ -72,29 +72,31 @@ export default function ConstraintSimulator({ itinerary, onRecalculate, loading 
   ]
 
   return (
-    <div className="glass-panel rounded-2xl p-6 w-full relative overflow-hidden">
+    <section className="glass-panel rounded-2xl p-6 w-full relative overflow-hidden" aria-labelledby="disruption-simulator-heading">
       {/* Decorative pulse glow in simulator */}
-      <div className="absolute top-0 right-0 w-2 h-2 rounded-full bg-rose-500 animate-ping mr-6 mt-6"></div>
+      <div className="absolute top-0 right-0 w-2 h-2 rounded-full bg-rose-500 animate-ping mr-6 mt-6" aria-hidden="true"></div>
       
-      <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-white" style={{ fontFamily: 'Outfit' }}>
-        <AlertTriangle className="w-5 h-5 text-rose-500" />
+      <h2 id="disruption-simulator-heading" className="text-xl font-bold mb-6 flex items-center gap-2 text-white" style={{ fontFamily: 'Outfit' }}>
+        <AlertTriangle className="w-5 h-5 text-rose-500" aria-hidden="true" />
         Disruption Simulator
       </h2>
 
       {/* Quick Triggers */}
       <div className="mb-6">
-        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">
+        <h3 className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-3">
           Instant Quick Triggers
-        </label>
+        </h3>
         <div className="grid grid-cols-2 gap-2">
           {quickActions.map((qa, index) => (
             <button
               key={index}
+              type="button"
               disabled={loading}
+              aria-label={`Recalculate itinerary: ${qa.title}`}
               onClick={qa.action}
               className={`p-3 rounded-xl border bg-white/2 hover:scale-[1.01] active:scale-[0.99] transition-all duration-300 flex flex-col items-center justify-center text-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed ${qa.color}`}
             >
-              <span className="text-2xl">{qa.icon}</span>
+              <span className="text-2xl" aria-hidden="true">{qa.icon}</span>
               <span className="text-[10px] font-bold leading-tight truncate w-full">{qa.title}</span>
             </button>
           ))}
@@ -107,14 +109,16 @@ export default function ConstraintSimulator({ itinerary, onRecalculate, loading 
       <div className="space-y-5">
         {/* Custom Weather Disruption Form */}
         <form onSubmit={handleWeatherDisrupt} className="space-y-3">
-          <span className="block text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1">
-            <CloudLightning className="w-3.5 h-3.5 text-rose-500" />
+          <h3 className="block text-xs font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-1">
+            <CloudLightning className="w-3.5 h-3.5 text-rose-500" aria-hidden="true" />
             Custom Weather Threat
-          </span>
+          </h3>
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="text-[10px] text-slate-400 font-semibold uppercase">Trip Day</label>
+              <label htmlFor="weather-day" className="text-[10px] text-slate-300 font-semibold uppercase">Trip Day</label>
               <select
+                id="weather-day"
+                name="weather_day"
                 value={weatherDisruption.day_number}
                 onChange={(e) => setWeatherDisruption({ ...weatherDisruption, day_number: parseInt(e.target.value) })}
                 className="w-full glass-input rounded-xl px-3 py-2 text-xs"
@@ -127,8 +131,10 @@ export default function ConstraintSimulator({ itinerary, onRecalculate, loading 
               </select>
             </div>
             <div>
-              <label className="text-[10px] text-slate-400 font-semibold uppercase">Condition</label>
+              <label htmlFor="weather-condition" className="text-[10px] text-slate-300 font-semibold uppercase">Condition</label>
               <select
+                id="weather-condition"
+                name="weather_condition"
                 value={weatherDisruption.condition}
                 onChange={(e) => setWeatherDisruption({ ...weatherDisruption, condition: e.target.value })}
                 className="w-full glass-input rounded-xl px-3 py-2 text-xs"
@@ -145,7 +151,7 @@ export default function ConstraintSimulator({ itinerary, onRecalculate, loading 
             className="w-full py-2.5 px-4 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-200 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all duration-300 disabled:opacity-40"
           >
             <span>Inject Weather Threat</span>
-            <span>⚡</span>
+            <span aria-hidden="true">⚡</span>
           </button>
         </form>
 
@@ -153,25 +159,31 @@ export default function ConstraintSimulator({ itinerary, onRecalculate, loading 
 
         {/* Custom Budget Disruption Form */}
         <form onSubmit={handleBudgetDisrupt} className="space-y-3">
-          <span className="block text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1">
-            <Percent className="w-3.5 h-3.5 text-amber-500" />
+          <h3 className="block text-xs font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-1">
+            <Percent className="w-3.5 h-3.5 text-amber-500" aria-hidden="true" />
             Custom Budget Cut
-          </span>
+          </h3>
           <div className="space-y-1">
             <div className="flex justify-between text-xs font-bold">
-              <span className="text-slate-400">Slashing Amount</span>
+              <label htmlFor="budget-percent" className="text-slate-300">Slashing Amount</label>
               <span className="text-amber-400">{budgetPercent}%</span>
             </div>
             <input
+              id="budget-percent"
+              name="budget_percent"
               type="range"
               min="10"
               max="50"
               step="5"
+              aria-valuemin="10"
+              aria-valuemax="50"
+              aria-valuenow={budgetPercent}
+              aria-valuetext={`${budgetPercent}% budget cut`}
               value={budgetPercent}
               onChange={(e) => setBudgetPercent(parseInt(e.target.value))}
               className="w-full accent-amber-500 h-1.5 bg-white/10 rounded-lg cursor-pointer"
             />
-            <div className="flex justify-between text-[10px] text-slate-500 font-medium">
+            <div className="flex justify-between text-[10px] text-slate-400 font-medium" aria-hidden="true">
               <span>10% (Minor Cut)</span>
               <span>50% (Extreme Cut)</span>
             </div>
@@ -182,10 +194,10 @@ export default function ConstraintSimulator({ itinerary, onRecalculate, loading 
             className="w-full py-2.5 px-4 bg-amber-950/40 hover:bg-amber-900/60 border border-amber-500/30 text-amber-200 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all duration-300 disabled:opacity-40"
           >
             <span>Apply Budget Optimization</span>
-            <span>⚡</span>
+            <span aria-hidden="true">⚡</span>
           </button>
         </form>
       </div>
-    </div>
+    </section>
   )
 }

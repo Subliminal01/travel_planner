@@ -26,44 +26,46 @@ export default function DecisionLog({ logs, onClear }) {
   }
 
   return (
-    <div className="glass-panel rounded-2xl overflow-hidden w-full border border-white/10 shadow-xl shadow-black/40">
+    <section className="glass-panel rounded-2xl overflow-hidden w-full border border-white/10 shadow-xl shadow-black/40" aria-labelledby="decision-log-heading">
       {/* Terminal Window Header */}
       <div className="bg-slate-900/90 px-4 py-3 border-b border-white/5 flex items-center justify-between">
         <div className="flex items-center gap-2">
           {/* OS Buttons */}
-          <div className="flex gap-1.5 mr-2">
+          <div className="flex gap-1.5 mr-2" aria-hidden="true">
             <span className="w-3 h-3 rounded-full bg-rose-500/80"></span>
             <span className="w-3 h-3 rounded-full bg-amber-500/80"></span>
             <span className="w-3 h-3 rounded-full bg-emerald-500/80"></span>
           </div>
-          <Terminal className="w-4 h-4 text-violet-400" />
-          <span className="text-xs font-mono font-semibold tracking-wider text-slate-400 uppercase">
+          <Terminal className="w-4 h-4 text-violet-400" aria-hidden="true" />
+          <h2 id="decision-log-heading" className="text-xs font-mono font-semibold tracking-wider text-slate-300 uppercase">
             Recalculation Decision Log
-          </span>
+          </h2>
         </div>
         
         {logs.length > 0 && (
           <button
+            type="button"
             onClick={onClear}
-            className="text-[10px] uppercase font-bold tracking-widest text-slate-500 hover:text-slate-300 transition-colors flex items-center gap-1"
+            aria-label="Clear recalculation decision log"
+            className="text-[10px] uppercase font-bold tracking-widest text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1"
           >
-            <Trash2 className="w-3 h-3" />
+            <Trash2 className="w-3 h-3" aria-hidden="true" />
             Clear console
           </button>
         )}
       </div>
 
       {/* Terminal Console Content */}
-      <div className="bg-slate-950 p-5 font-mono text-xs leading-relaxed min-h-[180px] max-h-[300px] overflow-y-auto custom-scrollbar flex flex-col gap-2">
+      <div className="bg-slate-950 p-5 font-mono text-xs leading-relaxed min-h-[180px] max-h-[300px] overflow-y-auto custom-scrollbar flex flex-col gap-2" role="log" aria-live="polite" aria-relevant="additions text">
         {logs.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-center py-8 text-slate-600">
-            <RefreshCw className="w-8 h-8 animate-pulse-slow mb-2" />
+          <div className="flex-1 flex flex-col items-center justify-center text-center py-8 text-slate-400">
+            <RefreshCw className="w-8 h-8 animate-pulse-slow mb-2" aria-hidden="true" />
             <p className="font-sans text-xs italic">Console idle. Awaiting real-time constraint injection...</p>
           </div>
         ) : (
           logs.map((log, index) => (
             <div key={index} className="flex gap-2 items-start border-b border-white/2 pb-1 last:border-b-0">
-              <span className="text-[10px] text-slate-600 select-none">
+              <span className="text-[10px] text-slate-400 select-none">
                 [{new Date().toLocaleTimeString(undefined, { hour12: false })}]
               </span>
               <p className="flex-1 whitespace-pre-wrap">{highlightLog(log)}</p>
@@ -71,6 +73,6 @@ export default function DecisionLog({ logs, onClear }) {
           ))
         )}
       </div>
-    </div>
+    </section>
   )
 }

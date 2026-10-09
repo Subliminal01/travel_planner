@@ -1,5 +1,5 @@
-import duckdb
-from typing import List, Set
+from typing import List, Optional, Set
+
 from .db import Database
 from .schemas import (
     ItineraryPreference, Itinerary, ItineraryDay, ItinerarySlot,
@@ -9,6 +9,91 @@ from .schemas import (
 class ItineraryEngine:
     def __init__(self):
         self.db = Database()
+
+    @staticmethod
+    def _destination_label(pref: ItineraryPreference) -> str:
+        return pref.destination_name or pref.destination_id.replace("-", " ").title()
+
+    @staticmethod
+    def _build_fallback_flights(pref: ItineraryPreference) -> tuple[Flight, Flight]:
+        destination = pref.destination_id
+        destination_name = pref.destination_name or destination.replace("-", " ").title()
+        outbound_price = round(max(90.0, min(650.0, pref.budget * 0.18)), 2)
+        return_price = round(max(90.0, min(650.0, pref.budget * 0.17)), 2)
+
+        return (
+            Flight(
+                id=f"custom-{destination}-outbound",
+                origin=pref.origin,
+                destination_id=destination,
+                airline="Aether Connect",
+                price=outbound_price,
+                departure_time="09:30 AM",
+                arrival_time=f"02:15 PM ({destination_name})",
+                direction="Outbound"
+            ),
+            Flight(
+                id=f"custom-{destination}-return",
+                origin=pref.origin,
+                destination_id=destination,
+                airline="Aether Connect",
+                price=return_price,
+                departure_time="05:45 PM",
+                arrival_time=f"10:10 PM ({pref.origin})",
+                direction="Return"
+            )
+        )
+
+    @staticmethod
+    def _build_fallback_activities(pref: ItineraryPreference) -> List[Activity]:
+        destination = pref.destination_id
+        destination_name = pref.destination_name or destination.replace("-", " ").title()
+        templates = [
+            ("old-town-walk", "Cultural", 0.0, 2.0, True, "Morning", "Historic Neighborhood Walk", "Explore landmark streets, markets, public squares, and local stories with a self-guided route.", 4.4),
+            ("signature-viewpoint", "Adventure", 18.0, 2.0, True, "Morning", "Signature Viewpoint Hike", "Start the day with a scenic overlook, city panorama, or nature trail near the destination.", 4.5),
+            ("local-museum", "Cultural", 24.0, 2.5, False, "Afternoon", "Local Culture Museum", "Spend the afternoon indoors learning the region's art, history, food, and design traditions.", 4.6),
+            ("food-market", "Relaxing", 28.0, 2.0, False, "Afternoon", "Food Market Tasting Trail", "Sample approachable local snacks, coffee, sweets, and street-food favorites at a central market.", 4.5),
+            ("outdoor-quarter", "Adventure", 35.0, 3.0, True, "Afternoon", "Outdoor Discovery Quarter", "Walk through parks, waterfronts, gardens, or active neighborhoods with flexible sightseeing stops.", 4.4),
+            ("wellness-evening", "Relaxing", 38.0, 2.0, False, "Evening", "Wellness & Slow Evening", "Recharge with a spa, bathhouse, calm cafe, or scenic low-key evening after a busy day.", 4.5),
+            ("night-food-tour", "Adventure", 45.0, 2.5, True, "Evening", "Night Food & Lights Tour", "Experience the destination after dark through safe, lively dining streets and illuminated landmarks.", 4.6),
+            ("dining-experience", "Cultural", 55.0, 2.0, False, "Evening", "Regional Dinner Experience", "Reserve an evening meal centered on regional specialties and a relaxed cultural atmosphere.", 4.7),
+            ("free-public-space", "Relaxing", 0.0, 1.5, True, "Afternoon", "Public Garden or Waterfront Break", "Keep the budget balanced with a calm open-air pause in a beautiful public space.", 4.3),
+        ]
+
+        return [
+            Activity(
+                id=f"custom-{destination}-{activity_id}",
+                destination_id=destination,
+                name=f"{destination_name} {name}",
+                vibe=vibe,
+                cost=cost,
+                duration_hours=duration,
+                is_outdoor=is_outdoor,
+                typical_slot=slot,
+                description=description,
+                rating=rating
+            )
+            for activity_id, vibe, cost, duration, is_outdoor, slot, name, description, rating in templates
+        ]
+
+    @staticmethod
+    def _activity_from_row(row) -> Activity:
+        return Activity(
+            id=row[0],
+            destination_id=row[1],
+            name=row[2],
+            vibe=row[3],
+            cost=row[4],
+            duration_hours=row[5],
+            is_outdoor=row[6],
+            typical_slot=row[7],
+            description=row[8],
+            rating=row[9]
+        )
+
+    @staticmethod
+    def _calculate_total_cost(days: List[ItineraryDay], flight_cost: float) -> float:
+        return flight_cost + sum(slot.cost for day in days for slot in day.slots)
 
     def _get_weather(self, conn, destination_id: str, day_number: int) -> WeatherForecast:
         """Fetches weather forecast for a destination and day from DuckDB."""
@@ -51,20 +136,20 @@ class ItineraryEngine:
                 [pref.destination_id]
             ).fetchone()
 
-            if not out_row or not ret_row:
-                raise ValueError(f"No flights found for destination {pref.destination_id}")
+            if out_row and ret_row:
+                outbound_flight = Flight(
+                    id=out_row[0], origin=out_row[1], destination_id=out_row[2],
+                    airline=out_row[3], price=out_row[4], departure_time=out_row[5],
+                    arrival_time=out_row[6], direction=out_row[7]
+                )
 
-            outbound_flight = Flight(
-                id=out_row[0], origin=out_row[1], destination_id=out_row[2],
-                airline=out_row[3], price=out_row[4], departure_time=out_row[5],
-                arrival_time=out_row[6], direction=out_row[7]
-            )
-
-            return_flight = Flight(
-                id=ret_row[0], origin=ret_row[1], destination_id=ret_row[2],
-                airline=ret_row[3], price=ret_row[4], departure_time=ret_row[5],
-                arrival_time=ret_row[6], direction=ret_row[7]
-            )
+                return_flight = Flight(
+                    id=ret_row[0], origin=ret_row[1], destination_id=ret_row[2],
+                    airline=ret_row[3], price=ret_row[4], departure_time=ret_row[5],
+                    arrival_time=ret_row[6], direction=ret_row[7]
+                )
+            else:
+                outbound_flight, return_flight = self._build_fallback_flights(pref)
 
             flight_cost = outbound_flight.price + return_flight.price
             activity_budget = pref.budget - flight_cost
@@ -76,13 +161,9 @@ class ItineraryEngine:
                 [pref.destination_id]
             ).fetchall()
 
-            activities_pool = []
-            for r in activities_cursor:
-                activities_pool.append(Activity(
-                    id=r[0], destination_id=r[1], name=r[2], vibe=r[3], cost=r[4],
-                    duration_hours=r[5], is_outdoor=r[6], typical_slot=r[7],
-                    description=r[8], rating=r[9]
-                ))
+            activities_pool = [self._activity_from_row(row) for row in activities_cursor]
+            if not activities_pool:
+                activities_pool = self._build_fallback_activities(pref)
 
             # 3. Build Schedule Day-by-Day
             days_list: List[ItineraryDay] = []
@@ -134,12 +215,10 @@ class ItineraryEngine:
                             activities_pool, slot, pref.vibe, used_activities, max_cost=activity_budget
                         )
                         slots.append(ItinerarySlot(
-                            time_slot="Slot", 
-                            activity=act, 
+                            time_slot=slot,
+                            activity=act,
                             cost=act.cost if act else 0.0
                         ))
-                        # Fix the slot name back to standard
-                        slots[-1].time_slot = slot
                         
                         if act:
                             used_activities.add(act.id)
@@ -148,8 +227,7 @@ class ItineraryEngine:
                 days_list.append(ItineraryDay(day_number=d, weather=weather, slots=slots))
 
             # 4. Calculate total cost and balance
-            total_activity_cost = sum(slot.cost for day in days_list for slot in day.slots)
-            total_cost = flight_cost + total_activity_cost
+            total_cost = self._calculate_total_cost(days_list, flight_cost)
             budget_remaining = pref.budget - total_cost
 
             # 5. Optimize if over budget
@@ -171,118 +249,90 @@ class ItineraryEngine:
             conn.close()
 
     def _select_best_activity(self, pool: List[Activity], slot: str, preferred_vibe: str, 
-                              used: Set[str], max_cost: float, force_indoor: bool = False) -> Activity:
+                              used: Set[str], max_cost: float, force_indoor: bool = False) -> Optional[Activity]:
         """Helper to score and select the best matching activity from the pool."""
-        candidates = []
-        for act in pool:
-            if act.id in used:
-                continue
-            if act.typical_slot != slot:
-                continue
-            if force_indoor and act.is_outdoor:
-                continue
-            if act.cost > max_cost:
-                continue
-            
-            # Simple scoring: preferred vibe matches, higher rating is better, lower cost is better
+        def score_activity(act: Activity) -> float:
             score = act.rating
             if act.vibe == preferred_vibe:
-                score += 5.0  # Big boost for preferred vibe
-            
-            candidates.append((score, act))
-        
-        if not candidates:
-            # Fallback to any slot if standard slot candidate is empty
-            if force_indoor:
-                # Try finding any indoor activity of same destination
-                for act in pool:
-                    if act.id not in used and not act.is_outdoor and act.cost <= max_cost:
-                        score = act.rating
-                        if act.vibe == preferred_vibe:
-                            score += 5.0
-                        candidates.append((score, act))
+                score += 5.0
+            return score
 
-        if candidates:
-            # Sort candidates by score descending
-            candidates.sort(key=lambda x: x[0], reverse=True)
-            return candidates[0][1]
-        
+        candidates = (
+            act for act in pool
+            if act.id not in used
+            and act.typical_slot == slot
+            and act.cost <= max_cost
+            and (not force_indoor or not act.is_outdoor)
+        )
+
+        best = max(candidates, key=score_activity, default=None)
+        if best:
+            return best
+
+        if force_indoor:
+            fallback_candidates = (
+                act for act in pool
+                if act.id not in used
+                and not act.is_outdoor
+                and act.cost <= max_cost
+            )
+            return max(fallback_candidates, key=score_activity, default=None)
+
         return None
+
+    def _find_cheaper_activity(self, pool: List[Activity], slot_name: str, current_cost: float,
+                               used: Set[str]) -> Optional[Activity]:
+        return min(
+            (
+                act for act in pool
+                if act.id not in used
+                and act.typical_slot == slot_name
+                and act.cost < current_cost
+            ),
+            key=lambda act: act.cost,
+            default=None
+        )
+
+    def _find_free_activity(self, pool: List[Activity], used: Set[str]) -> Optional[Activity]:
+        return next((act for act in pool if act.id not in used and act.cost == 0.0), None)
 
     def _optimize_budget_on_generation(self, days: List[ItineraryDay], budget: float, flight_cost: float,
                                        pool: List[Activity], used: Set[str]):
         """Performs greedy optimization to bring a generated itinerary within budget."""
-        current_total = flight_cost + sum(slot.cost for day in days for slot in day.slots)
-        
-        while current_total > budget:
-            # Find the most expensive activity currently scheduled
-            most_expensive_slot = None
-            max_cost = -1
-            target_day_idx = -1
-            target_slot_idx = -1
+        current_total = self._calculate_total_cost(days, flight_cost)
 
+        while current_total > budget:
+            most_expensive = None
             for d_idx, day in enumerate(days):
                 for s_idx, slot in enumerate(day.slots):
-                    if slot.activity and slot.activity.cost > max_cost:
-                        max_cost = slot.activity.cost
-                        most_expensive_slot = slot
-                        target_day_idx = d_idx
-                        target_slot_idx = s_idx
+                    if slot.activity and (most_expensive is None or slot.activity.cost > most_expensive[0]):
+                        most_expensive = (slot.activity.cost, d_idx, s_idx, slot)
 
-            if not most_expensive_slot or max_cost <= 0.0:
-                # No activities with cost > 0 to swap
+            if not most_expensive or most_expensive[0] <= 0.0:
                 break
 
-            # Find a cheaper alternative for the same slot
-            pref_vibe = days[target_day_idx].slots[target_slot_idx].activity.vibe
+            max_cost, target_day_idx, target_slot_idx, most_expensive_slot = most_expensive
+            old_act = most_expensive_slot.activity
             slot_name = days[target_day_idx].slots[target_slot_idx].time_slot
-            
-            # Try to find an unused cheaper activity for the same slot
-            alternative = None
-            best_alt_cost = max_cost
-            for act in pool:
-                if act.id in used:
-                    continue
-                if act.typical_slot != slot_name:
-                    continue
-                if act.cost < best_alt_cost:
-                    alternative = act
-                    best_alt_cost = act.cost
 
+            alternative = self._find_cheaper_activity(pool, slot_name, max_cost, used)
             if alternative:
-                # Swap it
-                old_act = days[target_day_idx].slots[target_slot_idx].activity
-                used.remove(old_act.id)
+                used.discard(old_act.id)
                 used.add(alternative.id)
-                
-                days[target_day_idx].slots[target_slot_idx].activity = alternative
-                days[target_day_idx].slots[target_slot_idx].cost = alternative.cost
-                current_total = flight_cost + sum(s.cost for day in days for s in day.slots)
+                most_expensive_slot.activity = alternative
+                most_expensive_slot.cost = alternative.cost
             else:
-                # No cheaper alternative for slot. Force swap to a $0 placeholder or keep it
-                # For safety, let's see if we can find a free activity in the pool
-                free_alt = None
-                for act in pool:
-                    if act.id not in used and act.cost == 0.0:
-                        free_alt = act
-                        break
-                
+                free_alt = self._find_free_activity(pool, used)
+                used.discard(old_act.id)
                 if free_alt:
-                    old_act = days[target_day_idx].slots[target_slot_idx].activity
-                    used.remove(old_act.id)
                     used.add(free_alt.id)
-                    
-                    days[target_day_idx].slots[target_slot_idx].activity = free_alt
-                    days[target_day_idx].slots[target_slot_idx].cost = 0.0
-                    current_total = flight_cost + sum(s.cost for day in days for s in day.slots)
+                    most_expensive_slot.activity = free_alt
+                    most_expensive_slot.cost = 0.0
                 else:
-                    # Can't optimize further without removing activity entirely
-                    # Set it to None to satisfy budget constraints (better than crashing!)
-                    old_act = days[target_day_idx].slots[target_slot_idx].activity
-                    used.remove(old_act.id)
-                    days[target_day_idx].slots[target_slot_idx].activity = None
-                    days[target_day_idx].slots[target_slot_idx].cost = 0.0
-                    current_total = flight_cost + sum(s.cost for day in days for s in day.slots)
+                    most_expensive_slot.activity = None
+                    most_expensive_slot.cost = 0.0
+
+            current_total = self._calculate_total_cost(days, flight_cost)
 
         return days, current_total
 
@@ -300,13 +350,9 @@ class ItineraryEngine:
                 [req.preferences.destination_id]
             ).fetchall()
 
-            activities_pool = []
-            for r in activities_cursor:
-                activities_pool.append(Activity(
-                    id=r[0], destination_id=r[1], name=r[2], vibe=r[3], cost=r[4],
-                    duration_hours=r[5], is_outdoor=r[6], typical_slot=r[7],
-                    description=r[8], rating=r[9]
-                ))
+            activities_pool = [self._activity_from_row(row) for row in activities_cursor]
+            if not activities_pool:
+                activities_pool = self._build_fallback_activities(req.preferences)
 
             # Maintain set of currently used activities to prevent duplication
             used_activities = set()
@@ -336,7 +382,7 @@ class ItineraryEngine:
                             )
                             
                             # Find indoor replacement
-                            used_activities.remove(old_act.id)
+                            used_activities.discard(old_act.id)
                             new_act = self._select_best_activity(
                                 activities_pool, 
                                 slot.time_slot, 
@@ -401,18 +447,10 @@ class ItineraryEngine:
                         decision_logs.append(f"🔍 Analyzing Day {day_idx+1} [{slot_name}] '{act.name}' (${act.cost}). Searching for cheaper alternatives...")
                         
                         # Find cheaper alternative
-                        used_activities.remove(act.id)
-                        alternative = None
-                        best_alt_cost = act.cost
-                        
-                        for p_act in activities_pool:
-                            if p_act.id in used_activities:
-                                continue
-                            if p_act.typical_slot != slot_name:
-                                continue
-                            if p_act.cost < best_alt_cost:
-                                alternative = p_act
-                                best_alt_cost = p_act.cost
+                        used_activities.discard(act.id)
+                        alternative = self._find_cheaper_activity(
+                            activities_pool, slot_name, act.cost, used_activities
+                        )
                         
                         if alternative:
                             # Swap
@@ -427,11 +465,7 @@ class ItineraryEngine:
                             )
                         else:
                             # If no direct slot alternative is cheaper, look for any $0 free activity
-                            free_alt = None
-                            for p_act in activities_pool:
-                                if p_act.id not in used_activities and p_act.cost == 0.0:
-                                    free_alt = p_act
-                                    break
+                            free_alt = self._find_free_activity(activities_pool, used_activities)
                             
                             if free_alt:
                                 itinerary.days[day_idx].slots[slot_idx].activity = free_alt
@@ -457,8 +491,7 @@ class ItineraryEngine:
 
             # Update final costs
             flight_cost = itinerary.outbound_flight.price + itinerary.return_flight.price
-            total_activity_cost = sum(slot.cost for day in itinerary.days for slot in day.slots)
-            itinerary.total_cost = flight_cost + total_activity_cost
+            itinerary.total_cost = self._calculate_total_cost(itinerary.days, flight_cost)
             itinerary.budget_remaining = itinerary.preferences.budget - itinerary.total_cost
             
             return itinerary, decision_logs

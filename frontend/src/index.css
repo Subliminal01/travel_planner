@@ -3,11 +3,24 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    color-scheme: dark;
+  }
+
   body {
     background-color: #030712; /* zinc-950/slate-950 */
     background-image: 
       radial-gradient(circle at 10% 20%, rgba(139, 92, 246, 0.08) 0%, transparent 40%),
       radial-gradient(circle at 90% 80%, rgba(20, 184, 166, 0.08) 0%, transparent 40%);
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 3px solid #22d3ee;
+    outline-offset: 3px;
   }
 
   /* Custom smooth scrollbar */
@@ -54,7 +67,6 @@
 .glass-input:focus {
   border-color: rgba(139, 92, 246, 0.6);
   box-shadow: 0 0 10px rgba(139, 92, 246, 0.25);
-  outline: none;
 }
 
 .glow-text-purple {

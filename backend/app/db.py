@@ -1,20 +1,31 @@
 import os
+import shutil
 import duckdb
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "travel_planner.db")
+PACKAGED_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "travel_planner.db")
+DB_PATH = os.getenv(
+    "TRAVEL_PLANNER_DB_PATH",
+    os.path.join("/tmp", "travel_planner.db") if os.getenv("VERCEL") else PACKAGED_DB_PATH
+)
 
 class Database:
+    _initialized_paths = set()
+
     def __init__(self):
         self.db_path = DB_PATH
-        self.conn = None
         self.initialize_db()
 
     def get_connection(self):
         """Returns a connection to the DuckDB database."""
+        if self.db_path != PACKAGED_DB_PATH and not os.path.exists(self.db_path) and os.path.exists(PACKAGED_DB_PATH):
+            shutil.copyfile(PACKAGED_DB_PATH, self.db_path)
         return duckdb.connect(self.db_path)
 
     def initialize_db(self):
         """Creates tables if they don't exist and seeds them with mock data."""
+        if self.db_path in self._initialized_paths:
+            return
+
         conn = self.get_connection()
         try:
             # 1. Create Tables
@@ -70,6 +81,7 @@ class Database:
             count = conn.execute("SELECT COUNT(*) FROM destinations").fetchone()[0]
             if count == 0:
                 self.seed_data(conn)
+            self._initialized_paths.add(self.db_path)
         finally:
             conn.close()
 
